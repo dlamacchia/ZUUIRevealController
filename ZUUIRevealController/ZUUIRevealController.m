@@ -32,7 +32,15 @@
 
 #import "ZUUIRevealController.h"
 
-@interface ZUUIRevealController()
+@interface ZUUIRevealController() {
+	BOOL enableSwipeAndTapGestures;
+
+	UITapGestureRecognizer *tapGestureRecognizer;
+	UISwipeGestureRecognizer *swipeGestureRecognizer;
+	UISwipeGestureRecognizer *swipeLeftGestureRecognizerFront;
+	UISwipeGestureRecognizer *swipeLeftGestureRecognizerRear;
+}
+
 
 // Private Properties:
 @property (strong, nonatomic) UIView *frontView;
@@ -47,9 +55,9 @@
 - (void)_concealAnimationWithDuration:(NSTimeInterval)duration resigningCompletelyFromRearViewPresentationMode:(BOOL)resigning;
 - (void)_concealPartiallyAnimationWithDuration:(NSTimeInterval)duration;
 
-- (void)_handleRevealGestureStateBeganWithRecognizer:(UIPanGestureRecognizer *)recognizer;
-- (void)_handleRevealGestureStateChangedWithRecognizer:(UIPanGestureRecognizer *)recognizer;
-- (void)_handleRevealGestureStateEndedWithRecognizer:(UIPanGestureRecognizer *)recognizer;
+- (void)_handleRevealGestureStateBeganWithRecognizer:(UIGestureRecognizer *)recognizer;
+- (void)_handleRevealGestureStateChangedWithRecognizer:(UIGestureRecognizer *)recognizer;
+- (void)_handleRevealGestureStateEndedWithRecognizer:(UIGestureRecognizer *)recognizer;
 
 - (void)_addFrontViewControllerToHierarchy:(UIViewController *)frontViewController;
 - (void)_addRearViewControllerToHierarchy:(UIViewController *)rearViewController;
@@ -79,6 +87,25 @@
 @synthesize frontViewShadowRadius = _frontViewShadowRadius;
 
 #pragma mark - Initialization
+
+- (id)initWithFrontViewController:(UIViewController *)frontViewController rearViewController:(UIViewController *)rearViewController options:(NSDictionary *)options {
+  self = [self initWithFrontViewController:frontViewController rearViewController:rearViewController];
+  if (options) {
+    NSArray *validOptions = [NSArray arrayWithObjects:@"rearViewRevealWidth", @"maxRearViewRevealOverdraw", @"rearViewPresentationWidth",
+                                     @"revealViewTriggerWidth", @"concealViewTriggerWidth", @"quickFlickVelocity", @"toggleAnimationDuration",
+                                     @"toggleAnimationDuration", nil];
+    for (NSString *k in validOptions) {
+      if ([options objectForKey:k]) {
+        [self setValue:[options objectForKey:k] forKey:k];
+      }
+    }
+
+    if ([options objectForKey:@"enableSwipeAndTapGestures"]) {
+      [self setEnableSwipeAndTapGestures:YES];
+    }
+  }
+  return self;
+}
 
 - (id)initWithFrontViewController:(UIViewController *)frontViewController rearViewController:(UIViewController *)rearViewController
 {
@@ -307,63 +334,114 @@
 
 #pragma mark - Gesture Based Reveal
 
-/* Slowly reveal or hide the rear view based on the translation of the finger.
- */
-- (void)revealGesture:(UIPanGestureRecognizer *)recognizer
-{	
-	// Ask the delegate (if appropriate) if we are allowed to proceed with our interaction:
-	if ([self.delegate conformsToProtocol:@protocol(ZUUIRevealControllerDelegate)])
-	{
-		// We're going to be revealing.
-		if (FrontViewPositionLeft == self.currentFrontViewPosition)
-		{
-			if ([self.delegate respondsToSelector:@selector(revealController:shouldRevealRearViewController:)])
-			{
-				if (![self.delegate revealController:self shouldRevealRearViewController:self.rearViewController])
-				{
-					return;
-				}
-			}
-		}
-		// We're going to be concealing.
-		else
-		{
-			if ([self.delegate respondsToSelector:@selector(revealController:shouldHideRearViewController:)])
-			{
-				if (![self.delegate revealController:self shouldHideRearViewController:self.rearViewController])
-				{
-					return;
-				}
-			}
-		}
-	}
-	
-	switch ([recognizer state])
-	{
-		case UIGestureRecognizerStateBegan:
-		{
-			[self _handleRevealGestureStateBeganWithRecognizer:recognizer];
-		}
-			break;
-			
-		case UIGestureRecognizerStateChanged:
-		{
-			[self _handleRevealGestureStateChangedWithRecognizer:recognizer];
-		}
-			break;
-			
-		case UIGestureRecognizerStateEnded:
-		{
-			[self _handleRevealGestureStateEndedWithRecognizer:recognizer];
-		}
-			break;
-			
-		default:
-			break;
-	}
+- (void)setEnableSwipeAndTapGestures:(BOOL)_enableSwipeAndTapGestures {
+  enableSwipeAndTapGestures = _enableSwipeAndTapGestures;
+
+  if(enableSwipeAndTapGestures) {
+    tapGestureRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(revealGesture:)];
+    tapGestureRecognizer.numberOfTapsRequired = 2;
+    tapGestureRecognizer.cancelsTouchesInView = NO;
+
+    swipeGestureRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(revealGesture:)];
+
+    swipeGestureRecognizer.direction = UISwipeGestureRecognizerDirectionRight;
+    swipeGestureRecognizer.cancelsTouchesInView = NO;
+
+    swipeLeftGestureRecognizerFront = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(revealGesture:)];
+
+    swipeLeftGestureRecognizerFront.direction = UISwipeGestureRecognizerDirectionLeft;
+    swipeLeftGestureRecognizerFront.cancelsTouchesInView = NO;
+
+    swipeLeftGestureRecognizerRear = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(revealGesture:)];
+
+    swipeLeftGestureRecognizerRear.direction = UISwipeGestureRecognizerDirectionLeft;
+    swipeLeftGestureRecognizerRear.cancelsTouchesInView = NO;
+
+    [self.frontViewController.view addGestureRecognizer:tapGestureRecognizer];
+    [self.frontViewController.view addGestureRecognizer:swipeGestureRecognizer];
+    [self.frontViewController.view addGestureRecognizer:swipeLeftGestureRecognizerFront];
+    [self.rearViewController.view addGestureRecognizer:swipeLeftGestureRecognizerRear];
+  }
+  else {
+    if(swipeGestureRecognizer != nil) {
+      [self.frontViewController.view removeGestureRecognizer:tapGestureRecognizer];
+      [self.frontViewController.view removeGestureRecognizer:swipeGestureRecognizer];
+      [self.frontViewController.view removeGestureRecognizer:swipeLeftGestureRecognizerFront];
+      [self.rearViewController.view removeGestureRecognizer:swipeLeftGestureRecognizerRear];
+    }
+  }
 }
 
-- (void)_handleRevealGestureStateBeganWithRecognizer:(UIPanGestureRecognizer *)recognizer
+- (BOOL)enableSwipeAndTapGestures {
+	return enableSwipeAndTapGestures;
+}
+
+/* Slowly reveal or hide the rear view based on the translation of the finger.
+ */
+- (void)revealGesture:(UIGestureRecognizer *)recognizer
+{
+  // Ask the delegate (if appropriate) if we are allowed to proceed with our interaction:
+  if ([self.delegate conformsToProtocol:@protocol(ZUUIRevealControllerDelegate)])
+  {
+    if ([recognizer isKindOfClass:[UITapGestureRecognizer class]])
+    {
+      if (FrontViewPositionLeft == self.currentFrontViewPosition)
+      {
+        // Do nothing.
+        return;
+      }
+    }
+
+    // We're going to be revealing.
+    if (FrontViewPositionLeft == self.currentFrontViewPosition)
+    {
+      if ([self.delegate respondsToSelector:@selector(revealController:shouldRevealRearViewController:)])
+      {
+        if (![self.delegate revealController:self shouldRevealRearViewController:self.rearViewController])
+        {
+          return;
+        }
+      }
+    }
+    // We're going to be concealing.
+    else
+    {
+      if ([self.delegate respondsToSelector:@selector(revealController:shouldHideRearViewController:)])
+      {
+        if (![self.delegate revealController:self shouldHideRearViewController:self.rearViewController])
+        {
+          return;
+        }
+      }
+    }
+  }
+	
+  switch ([recognizer state])
+  {
+  case UIGestureRecognizerStateBegan:
+  {
+    [self _handleRevealGestureStateBeganWithRecognizer:recognizer];
+  }
+  break;
+			
+  case UIGestureRecognizerStateChanged:
+  {
+    [self _handleRevealGestureStateChangedWithRecognizer:recognizer];
+  }
+  break;
+			
+  case UIGestureRecognizerStateEnded:
+  {
+    [self _handleRevealGestureStateEndedWithRecognizer:recognizer];
+  }
+  break;
+			
+  default:
+    break;
+  }
+}
+
+- (void)_handleRevealGestureStateBeganWithRecognizer:(UIGestureRecognizer *)recognizer
 {
 	// Check if a delegate exists
 	if ([self.delegate conformsToProtocol:@protocol(ZUUIRevealControllerDelegate)])
@@ -386,76 +464,91 @@
 	}
 }
 
-- (void)_handleRevealGestureStateChangedWithRecognizer:(UIPanGestureRecognizer *)recognizer
+- (void)_handleRevealGestureStateChangedWithRecognizer:(UIGestureRecognizer *)recognizer
 {
-	if (FrontViewPositionLeft == self.currentFrontViewPosition)
-	{
-		if ([recognizer translationInView:self.view].x < 0.0f)
-		{
-			self.frontView.frame = CGRectMake(0.0f, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
-		}
-		else
-		{
-			float offset = [self _calculateOffsetForTranslationInView:[recognizer translationInView:self.view].x];
-			self.frontView.frame = CGRectMake(offset, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
-		}
-	}
-	else
-	{
-		if ([recognizer translationInView:self.view].x > 0.0f)
-		{
-			float offset = [self _calculateOffsetForTranslationInView:([recognizer translationInView:self.view].x+self.rearViewRevealWidth)];
-			self.frontView.frame = CGRectMake(offset, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
-		}
-		else if ([recognizer translationInView:self.view].x > -self.rearViewRevealWidth)
-		{
-			self.frontView.frame = CGRectMake([recognizer translationInView:self.view].x+self.rearViewRevealWidth, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
-		}
-		else
-		{
-			self.frontView.frame = CGRectMake(0.0f, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
-		}
-	}
+  if (![recognizer isKindOfClass:[UIPanGestureRecognizer class]]) {
+    return;
+  }
+
+  UIPanGestureRecognizer *panRecognizer = (UIPanGestureRecognizer *)recognizer;
+  if (FrontViewPositionLeft == self.currentFrontViewPosition)
+  {
+    if ([panRecognizer translationInView:self.view].x < 0.0f)
+    {
+      self.frontView.frame = CGRectMake(0.0f, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
+    }
+    else
+    {
+      float offset = [self _calculateOffsetForTranslationInView:[panRecognizer translationInView:self.view].x];
+      self.frontView.frame = CGRectMake(offset, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
+    }
+  }
+  else
+  {
+    if ([panRecognizer translationInView:self.view].x > 0.0f)
+    {
+      float offset = [self _calculateOffsetForTranslationInView:([panRecognizer translationInView:self.view].x+self.rearViewRevealWidth)];
+      self.frontView.frame = CGRectMake(offset, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
+    }
+    else if ([panRecognizer translationInView:self.view].x > -self.rearViewRevealWidth)
+    {
+      self.frontView.frame = CGRectMake([panRecognizer translationInView:self.view].x+self.rearViewRevealWidth, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
+    }
+    else
+    {
+      self.frontView.frame = CGRectMake(0.0f, 0.0f, self.frontView.frame.size.width, self.frontView.frame.size.height);
+    }
+  }
 }
 
-- (void)_handleRevealGestureStateEndedWithRecognizer:(UIPanGestureRecognizer *)recognizer
-{
-	// Case a): Quick finger flick fast enough to cause instant change:
-	if (fabs([recognizer velocityInView:self.view].x) > self.quickFlickVelocity)
-	{
-		if ([recognizer velocityInView:self.view].x > 0.0f)
-		{				
-			[self _revealAnimationWithDuration:self.toggleAnimationDuration];
-		}
-		else
-		{
-			[self _concealAnimationWithDuration:self.toggleAnimationDuration resigningCompletelyFromRearViewPresentationMode:NO];
-		}
-	}
-	// Case b) Slow pan/drag ended:
-	else
-	{
-		float dynamicTriggerLevel = (FrontViewPositionLeft == self.currentFrontViewPosition) ? self.revealViewTriggerWidth : self.concealViewTriggerWidth;
-		
-		if (self.frontView.frame.origin.x >= dynamicTriggerLevel && self.frontView.frame.origin.x != self.rearViewRevealWidth)
-		{
-			[self _revealAnimationWithDuration:self.toggleAnimationDuration];
-		}
-		else
-		{
-			[self _concealAnimationWithDuration:self.toggleAnimationDuration resigningCompletelyFromRearViewPresentationMode:NO];
-		}
-	}
-	
-	// Now adjust the current state enum.
-	if (self.frontView.frame.origin.x == 0.0f)
-	{
-		self.currentFrontViewPosition = FrontViewPositionLeft;
-	}
-	else
-	{
-		self.currentFrontViewPosition = FrontViewPositionRight;
-	}
+
+- (void)_handleRevealGestureStateEndedWithRecognizer:(UIGestureRecognizer *)recognizer {
+  if ([recognizer isKindOfClass:[UISwipeGestureRecognizer class]]) {
+    UISwipeGestureRecognizer *swipeRecognizer = (UISwipeGestureRecognizer *)recognizer;
+    if (swipeRecognizer.direction == UISwipeGestureRecognizerDirectionRight) {
+      [self _revealAnimationWithDuration:self.toggleAnimationDuration];
+    } else if (swipeRecognizer.direction == UISwipeGestureRecognizerDirectionLeft) {
+      [self _concealAnimationWithDuration:self.toggleAnimationDuration resigningCompletelyFromRearViewPresentationMode:NO];
+    }
+  } else if ([recognizer isKindOfClass:[UITapGestureRecognizer class]]) {
+    // We only use a tap recognizer when the rear view is revealed.
+    if (FrontViewPositionRight == self.currentFrontViewPosition) {
+      [self _concealAnimationWithDuration:self.toggleAnimationDuration resigningCompletelyFromRearViewPresentationMode:NO];
+    } else {
+      return;
+    }
+  } else if ([recognizer isKindOfClass:[UIPanGestureRecognizer class]]) {
+    UIPanGestureRecognizer *panRecognizer = (UIPanGestureRecognizer *)recognizer;
+    // Case a): Quick finger flick fast enough to cause instant change:
+    if (fabs([panRecognizer velocityInView:self.view].x) > self.quickFlickVelocity) {
+      if ([panRecognizer velocityInView:self.view].x > 0.0f) {
+        [self _revealAnimationWithDuration:self.toggleAnimationDuration];
+      }
+      else {
+        [self _concealAnimationWithDuration:self.toggleAnimationDuration resigningCompletelyFromRearViewPresentationMode:NO];
+      }
+    } else {
+      // Case b) Slow pan/drag ended:
+      float dynamicTriggerLevel = (FrontViewPositionLeft == self.currentFrontViewPosition) ? self.revealViewTriggerWidth : self.concealViewTriggerWidth;
+      if (self.frontView.frame.origin.x >= dynamicTriggerLevel && self.frontView.frame.origin.x != self.rearViewRevealWidth) {
+        [self _revealAnimationWithDuration:self.toggleAnimationDuration];
+      }
+      else {
+        [self _concealAnimationWithDuration:self.toggleAnimationDuration resigningCompletelyFromRearViewPresentationMode:NO];
+      }
+    }
+  } else {
+    // Do nothing.
+    return;
+  }
+
+  // Now adjust the current state enum.
+  if (self.frontView.frame.origin.x == 0.0f) {
+    self.currentFrontViewPosition = FrontViewPositionLeft;
+  }
+  else {
+    self.currentFrontViewPosition = FrontViewPositionRight;
+  }
 }
 
 #pragma mark - Helper
@@ -586,6 +679,7 @@
 	{
 		[self _swapCurrentFrontViewControllerWith:frontViewController animated:animated];
 	}
+        [self setEnableSwipeAndTapGestures:YES];
 }
 
 #pragma mark - UIViewController Containment
@@ -774,6 +868,14 @@
 	[_rearViewController release], _rearViewController = nil;
 	[_frontView release], _frontView = nil;
 	[_rearView release], _rearView = nil;
+
+	if(tapGestureRecognizer != nil) {
+		[tapGestureRecognizer release], tapGestureRecognizer = nil;
+		[swipeGestureRecognizer release], swipeGestureRecognizer = nil;
+		[swipeLeftGestureRecognizerFront release], swipeLeftGestureRecognizerFront = nil;
+		[swipeLeftGestureRecognizerRear release], swipeLeftGestureRecognizerRear = nil;
+	}
+
 	[super dealloc];
 }
 #endif

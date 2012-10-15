@@ -52,6 +52,9 @@ typedef enum
 @property (assign, nonatomic) FrontViewPosition currentFrontViewPosition;
 @property (assign, nonatomic) id<ZUUIRevealControllerDelegate> delegate;
 
+// use swipe and tap gesutures
+@property (assign, nonatomic) BOOL enableSwipeAndTapGestures;
+
 // Defines how much of the rear view is shown.
 @property (assign, nonatomic) CGFloat rearViewRevealWidth;
 
@@ -77,8 +80,9 @@ typedef enum
 @property (assign, nonatomic) CGFloat frontViewShadowRadius;
 
 #pragma mark - Public Methods:
+- (id)initWithFrontViewController:(UIViewController *)frontViewController rearViewController:(UIViewController *)rearViewController options:(NSDictionary *)options;
 - (id)initWithFrontViewController:(UIViewController *)aFrontViewController rearViewController:(UIViewController *)aBackViewController;
-- (void)revealGesture:(UIPanGestureRecognizer *)recognizer;
+- (void)revealGesture:(UIGestureRecognizer *)recognizer;
 - (void)revealToggle:(id)sender;
 - (void)revealToggle:(id)sender animationDuration:(NSTimeInterval)animationDuration;
 
